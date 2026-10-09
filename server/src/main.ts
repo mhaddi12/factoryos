@@ -12,7 +12,7 @@ async function bootstrap() {
     origin: process.env.APP_URL || 'http://localhost:3000',
     credentials: true,
   })
-  await app.listen(process.env.PORT || 4000)
+  await app.listen(process.env.PORT || 4000, '0.0.0.0')
 }
 
 void bootstrap()

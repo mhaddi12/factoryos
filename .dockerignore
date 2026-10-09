@@ -1,0 +1,12 @@
+node_modules
+generated
+dist
+client
+.git
+.github
+.local
+tests
+*.log
+.env
+.env.*
+!.env.example
