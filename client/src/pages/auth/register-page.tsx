@@ -10,7 +10,7 @@ import { AuthCard } from './auth-card'
 export function RegisterPage() {
   const { setUser } = useSession()
   const navigate = useNavigate()
-  const [form, setForm] = useState({ companyName: '', name: '', email: '', password: '', phone: '', city: '' })
+  const [form, setForm] = useState({ companyName: '', name: '', email: '', password: '', confirmPassword: '', phone: '', city: '' })
   const [error, setError] = useState<unknown>(null)
 
   async function submit() {
@@ -34,6 +34,7 @@ export function RegisterPage() {
         <Field label="Your name" error={fieldError(error, 'name')}><input className={inputClass} value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} required /></Field>
         <Field label="Email" error={fieldError(error, 'email')}><input className={inputClass} type="email" value={form.email} onChange={event => setForm({ ...form, email: event.target.value })} required /></Field>
         <Field label="Password" error={fieldError(error, 'password')}><input className={inputClass} type="password" value={form.password} onChange={event => setForm({ ...form, password: event.target.value })} required /></Field>
+        <Field label="Confirm password" error={fieldError(error, 'confirmPassword')}><input className={inputClass} type="password" value={form.confirmPassword} onChange={event => setForm({ ...form, confirmPassword: event.target.value })} required /></Field>
         <Field label="Phone" error={fieldError(error, 'phone')}><input className={inputClass} value={form.phone} onChange={event => setForm({ ...form, phone: event.target.value })} placeholder="0300-1234567" /></Field>
         <Field label="City" error={fieldError(error, 'city')}>
           <input className={inputClass} list="cities" value={form.city} onChange={event => setForm({ ...form, city: event.target.value })} />
