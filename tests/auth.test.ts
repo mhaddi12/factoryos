@@ -51,7 +51,7 @@ describeDb('authentication', () => {
     })).rejects.toMatchObject({ statusCode: 409 })
   })
 
-  it('resets the password and drops old sessions', async () => {
+  it('resets the password', async () => {
     const email = `reset-${suffix}@auth.test`
     const created = await registerOwner({
       companyName: `Reset Co ${suffix}`,

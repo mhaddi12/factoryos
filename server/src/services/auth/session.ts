@@ -4,12 +4,11 @@ import { getPrisma } from '../../database/prisma'
 import { permissionsForRole, type UserRole } from '../../../../shared/auth/permissions'
 import type { SessionUser } from '../../../../shared/types/auth'
 import { unauthorized } from '../../utils/errors'
-import { readAccessToken, signAccessToken } from './tokens'
+import { readAccessToken, readRefreshToken, signAccessToken, signRefreshToken } from './tokens'
 
 const ACCESS_COOKIE = 'factoryos_access'
 const REFRESH_COOKIE = 'factoryos_refresh'
 const LEGACY_COOKIE = 'factoryos_session'
-const REFRESH_MS = 14 * 24 * 60 * 60 * 1000
 const RENEW_WITHIN_MS = 7 * 24 * 60 * 60 * 1000
 const DEV_SECRET = 'dev-only-change-me-before-any-real-deployment'
 
@@ -135,81 +134,57 @@ function setAuthCookies(
   ctx.delete(LEGACY_COOKIE, { path: '/' })
 }
 
-async function loadAccount(sessionId: string, userId: string) {
-  const session = await getPrisma().session.findUnique({
-    where: { id: sessionId },
-    include: { user: { include: accountInclude } },
+async function loadUser(userId: string) {
+  const user = await getPrisma().user.findUnique({
+    where: { id: userId },
+    include: accountInclude,
   })
 
-  if (!session || session.userId !== userId || session.expiresAt <= new Date() || !session.user.isActive) {
+  if (!user || !user.isActive) {
     return null
   }
 
-  return session
+  return user
 }
 
-async function rotateRefresh(
-  ctx: CookieContext,
-  sessionId: string,
-  userId: string,
-  currentToken: string,
-  expiresAt: Date,
-) {
-  const next = createSecret()
-  const renewedAt = expiresAt.getTime() - Date.now() < RENEW_WITHIN_MS
-    ? new Date(Date.now() + REFRESH_MS)
-    : expiresAt
-  const updated = await getPrisma().session.updateMany({
-    where: { id: sessionId, tokenHash: hashSecret(currentToken) },
-    data: { tokenHash: next.tokenHash, expiresAt: renewedAt },
-  })
-  const access = signAccessToken({ sub: userId, sid: sessionId }, authSecret())
-
-  if (updated.count === 1) {
-    setAuthCookies(ctx, access.token, access.expiresAt, next.token, renewedAt)
-    return
-  }
-
-  ctx.set(ACCESS_COOKIE, access.token, cookieOptions(access.expiresAt))
-  ctx.delete(LEGACY_COOKIE, { path: '/' })
+function issuePair(ctx: CookieContext, userId: string) {
+  const secret = authSecret()
+  const access = signAccessToken(userId, secret)
+  const refresh = signRefreshToken(userId, secret)
+  setAuthCookies(ctx, access.token, access.expiresAt, refresh.token, refresh.expiresAt)
 }
 
-export async function startSession(userId: string, ctx: CookieContext) {
-  const refresh = createSecret()
-  const expiresAt = new Date(Date.now() + REFRESH_MS)
-  const session = await getPrisma().session.create({
-    data: {
-      userId,
-      tokenHash: refresh.tokenHash,
-      expiresAt,
-    },
-  })
-  const access = signAccessToken({ sub: userId, sid: session.id }, authSecret())
-  setAuthCookies(ctx, access.token, access.expiresAt, refresh.token, expiresAt)
+export async function issueTokens(userId: string, ctx: CookieContext) {
+  issuePair(ctx, userId)
 }
 
-export async function refreshSession(ctx: CookieContext) {
+export async function refreshTokens(ctx: CookieContext) {
   const refresh = ctx.get(REFRESH_COOKIE)
-  if (!refresh) {
+  const claims = refresh ? readRefreshToken(refresh, authSecret()) : null
+
+  if (!claims) {
     clearAuthCookies(ctx)
     throw unauthorized()
   }
 
-  const session = await getPrisma().session.findUnique({
-    where: { tokenHash: hashSecret(refresh) },
-    include: { user: { include: accountInclude } },
-  })
-
-  if (!session || session.expiresAt <= new Date() || !session.user.isActive) {
-    if (session) {
-      await getPrisma().session.delete({ where: { id: session.id } }).catch(() => undefined)
-    }
+  const user = await loadUser(claims.sub)
+  if (!user) {
     clearAuthCookies(ctx)
     throw unauthorized()
   }
 
-  await rotateRefresh(ctx, session.id, session.userId, refresh, session.expiresAt)
-  return session.user
+  const secret = authSecret()
+  const access = signAccessToken(user.id, secret)
+  const refreshExpires = new Date(claims.exp * 1000)
+  if (refreshExpires.getTime() - Date.now() < RENEW_WITHIN_MS) {
+    const next = signRefreshToken(user.id, secret)
+    setAuthCookies(ctx, access.token, access.expiresAt, next.token, next.expiresAt)
+  } else {
+    ctx.set(ACCESS_COOKIE, access.token, cookieOptions(access.expiresAt))
+    ctx.delete(LEGACY_COOKIE, { path: '/' })
+  }
+
+  return user
 }
 
 export async function requireUser(ctx: CookieContext) {
@@ -217,42 +192,31 @@ export async function requireUser(ctx: CookieContext) {
   const claims = accessToken ? readAccessToken(accessToken, authSecret()) : null
 
   if (claims) {
-    const session = await loadAccount(claims.sid, claims.sub)
-    if (session) {
-      return session.user
+    const user = await loadUser(claims.sub)
+    if (user) {
+      return user
     }
+    clearAuthCookies(ctx)
+    throw unauthorized()
   }
 
-  return refreshSession(ctx)
+  return refreshTokens(ctx)
 }
 
-export async function endSession(ctx: CookieContext) {
-  const refresh = ctx.get(REFRESH_COOKIE)
+export async function clearTokens(ctx: CookieContext) {
   const accessToken = ctx.get(ACCESS_COOKIE)
+  const refresh = ctx.get(REFRESH_COOKIE)
   clearAuthCookies(ctx)
 
-  const prisma = getPrisma()
-  const session = refresh
-    ? await prisma.session.findUnique({
-        where: { tokenHash: hashSecret(refresh) },
-        include: { user: { select: { id: true, companyId: true } } },
-      })
-    : null
-  const claims = !session && accessToken
-    ? readAccessToken(accessToken, authSecret(), Date.now(), true)
-    : null
-  const accessSession = claims
-    ? await prisma.session.findUnique({
-        where: { id: claims.sid },
-        include: { user: { select: { id: true, companyId: true } } },
-      })
-    : null
-  const current = session || accessSession
+  const claims = (accessToken ? readAccessToken(accessToken, authSecret(), Date.now(), true) : null)
+    ?? (refresh ? readRefreshToken(refresh, authSecret(), Date.now(), true) : null)
 
-  if (!current) {
+  if (!claims) {
     return null
   }
 
-  await prisma.session.delete({ where: { id: current.id } }).catch(() => undefined)
-  return current.user
+  return getPrisma().user.findUnique({
+    where: { id: claims.sub },
+    select: { id: true, companyId: true },
+  })
 }

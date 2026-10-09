@@ -1,10 +1,13 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 
 export const ACCESS_MS = 15 * 60 * 1000
+export const REFRESH_MS = 14 * 24 * 60 * 60 * 1000
 
-export type AccessClaims = {
+export type TokenKind = 'access' | 'refresh'
+
+export type TokenClaims = {
   sub: string
-  sid: string
+  typ: TokenKind
   exp: number
 }
 
@@ -16,10 +19,10 @@ function sign(data: string, secret: string) {
   return createHmac('sha256', secret).update(data).digest('base64url')
 }
 
-export function signAccessToken(input: { sub: string, sid: string }, secret: string, now = Date.now()) {
-  const exp = Math.floor((now + ACCESS_MS) / 1000)
+function signToken(sub: string, typ: TokenKind, ttlMs: number, secret: string, now: number) {
+  const exp = Math.floor((now + ttlMs) / 1000)
   const header = encode(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
-  const payload = encode(JSON.stringify({ sub: input.sub, sid: input.sid, exp }))
+  const payload = encode(JSON.stringify({ sub, typ, exp }))
   const data = `${header}.${payload}`
   return {
     token: `${data}.${sign(data, secret)}`,
@@ -27,7 +30,23 @@ export function signAccessToken(input: { sub: string, sid: string }, secret: str
   }
 }
 
+export function signAccessToken(sub: string, secret: string, now = Date.now()) {
+  return signToken(sub, 'access', ACCESS_MS, secret, now)
+}
+
+export function signRefreshToken(sub: string, secret: string, now = Date.now()) {
+  return signToken(sub, 'refresh', REFRESH_MS, secret, now)
+}
+
 export function readAccessToken(token: string, secret: string, now = Date.now(), ignoreExpiry = false) {
+  return readToken(token, secret, 'access', now, ignoreExpiry)
+}
+
+export function readRefreshToken(token: string, secret: string, now = Date.now(), ignoreExpiry = false) {
+  return readToken(token, secret, 'refresh', now, ignoreExpiry)
+}
+
+function readToken(token: string, secret: string, typ: TokenKind, now: number, ignoreExpiry: boolean) {
   const parts = token.split('.')
   if (parts.length !== 3) {
     return null
@@ -48,15 +67,15 @@ export function readAccessToken(token: string, secret: string, now = Date.now(),
       return null
     }
 
-    const claims = JSON.parse(Buffer.from(payload, 'base64url').toString()) as Partial<AccessClaims>
-    if (!claims.sub || !claims.sid || typeof claims.exp !== 'number') {
+    const claims = JSON.parse(Buffer.from(payload, 'base64url').toString()) as Partial<TokenClaims>
+    if (!claims.sub || claims.typ !== typ || typeof claims.exp !== 'number') {
       return null
     }
     if (!ignoreExpiry && claims.exp * 1000 <= now) {
       return null
     }
 
-    return { sub: claims.sub, sid: claims.sid, exp: claims.exp }
+    return { sub: claims.sub, typ, exp: claims.exp }
   } catch {
     return null
   }

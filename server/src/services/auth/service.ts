@@ -183,9 +183,6 @@ export async function resetPassword(token: string, password: string) {
       where: { userId: resetToken.userId, usedAt: null },
       data: { usedAt: new Date() },
     }),
-    prisma.session.deleteMany({
-      where: { userId: resetToken.userId },
-    }),
     prisma.auditLog.create({
       data: {
         companyId: resetToken.user.companyId,

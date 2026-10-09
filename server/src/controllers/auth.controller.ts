@@ -3,7 +3,7 @@ import type { Request, Response } from 'express'
 import { forgotPasswordSchema, loginSchema, registerSchema, resetPasswordSchema } from '../../../shared/validation/auth'
 import { getPrisma } from '../database/prisma'
 import { authenticate, registerOwner, requestPasswordReset, resetPassword } from '../services/auth/service'
-import { endSession, expressCookieContext, refreshSession, requireUser, startSession, toSessionUser } from '../services/auth/session'
+import { clearTokens, expressCookieContext, issueTokens, refreshTokens, requireUser, toSessionUser } from '../services/auth/session'
 import { jsonSuccess } from '../utils/http'
 import { clientAddress, rateLimit } from '../utils/rate-limit'
 import { run } from '../common/http'
@@ -16,7 +16,7 @@ export class AuthController {
       rateLimit(`login:${clientAddress(req)}`, 10, 15 * 60 * 1000)
       const input = loginSchema.parse(body)
       const user = await authenticate(input.email, input.password)
-      await startSession(user.id, expressCookieContext(req, res))
+      await issueTokens(user.id, expressCookieContext(req, res))
       return jsonSuccess(res, { user: toSessionUser(user) }, 200, 'Signed in.')
     })
   }
@@ -27,7 +27,7 @@ export class AuthController {
       rateLimit(`register:${clientAddress(req)}`, 5, 60 * 60 * 1000)
       const input = registerSchema.parse(body)
       const account = await registerOwner(input)
-      await startSession(account.userId, expressCookieContext(req, res))
+      await issueTokens(account.userId, expressCookieContext(req, res))
       const user = await getPrisma().user.findUniqueOrThrow({
         where: { id: account.userId },
         include: { company: { select: { id: true, name: true, currency: true, timezone: true } } },
@@ -39,7 +39,7 @@ export class AuthController {
   @Post('logout')
   logout(@Req() req: Request, @Res() res: Response) {
     return run(res, async () => {
-      const user = await endSession(expressCookieContext(req, res))
+      const user = await clearTokens(expressCookieContext(req, res))
       if (user) {
         await getPrisma().auditLog.create({
           data: {
@@ -66,7 +66,7 @@ export class AuthController {
   @Post('refresh')
   refresh(@Req() req: Request, @Res() res: Response) {
     return run(res, async () => {
-      await refreshSession(expressCookieContext(req, res))
+      await refreshTokens(expressCookieContext(req, res))
       return jsonSuccess(res, { refreshed: true })
     })
   }
