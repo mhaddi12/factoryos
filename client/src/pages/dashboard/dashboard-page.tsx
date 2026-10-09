@@ -3,12 +3,24 @@ import type { DashboardData } from '@shared/types/dashboard'
 import { api } from '../../lib/api'
 import { money, qty } from '../../lib/format'
 import { ColumnChart, CompareBars } from '../../components/charts'
-import { Alert, Bars, Page, messageOf, panelClass } from '../../components/ui'
+import { Alert, Bars, CardsSkeleton, ChartSkeleton, Page, Shimmer, messageOf, panelClass } from '../../components/ui'
 
 export function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [error, setError] = useState('')
-  useEffect(() => { api<DashboardData>('/api/dashboard').then(setData).catch(reason => setError(messageOf(reason))) }, [])
+  const [loading, setLoading] = useState(true)
+  useEffect(() => { api<DashboardData>('/api/dashboard').then(setData).catch(reason => setError(messageOf(reason))).finally(() => setLoading(false)) }, [])
+  if (loading) {
+    return (
+      <Page title="Dashboard">
+        <CardsSkeleton />
+        <div className="mt-5 grid gap-4 xl:grid-cols-2">
+          <section className={panelClass}><Shimmer className="mb-4 h-5 w-24" /><ChartSkeleton /></section>
+          <section className={panelClass}><Shimmer className="mb-4 h-5 w-24" /><ChartSkeleton /></section>
+        </div>
+      </Page>
+    )
+  }
   if (!data) return <Page title="Dashboard"><Alert error={error} /></Page>
   const cards = [
     ['Products', String(data.counts.products)],

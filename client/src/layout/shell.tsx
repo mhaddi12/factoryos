@@ -2,18 +2,40 @@ import { useState, type ReactNode } from 'react'
 import { NavLink, Navigate, Outlet } from 'react-router-dom'
 import { APP_NAV, ROLE_LABELS, isNavGroup } from '@shared/navigation'
 import { useSession } from '../auth/session'
+import { CardsSkeleton, FormSkeleton, LoadingNote, Shimmer } from '../components/ui'
 import { api } from '../lib/api'
 
 export function AppShell() {
   const { user, loaded, setUser } = useSession()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [leaving, setLeaving] = useState(false)
 
-  if (!loaded) return <p className="p-8 text-sm text-slate-500">Loading…</p>
+  if (!loaded) {
+    return (
+      <div className="min-h-screen lg:grid lg:grid-cols-[16.5rem_1fr]" aria-busy="true">
+        <LoadingNote />
+        <aside className="hidden border-r border-slate-200 bg-white p-4 lg:block">
+          <Shimmer className="h-6 w-32" />
+          <Shimmer className="mt-2 h-4 w-40" />
+          <div className="mt-6 space-y-3">{Array.from({ length: 8 }, (_, index) => <Shimmer key={index} className="h-9 w-full" />)}</div>
+        </aside>
+        <main className="px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
+          <Shimmer className="h-8 w-40" />
+          <div className="mt-5"><CardsSkeleton /></div>
+        </main>
+      </div>
+    )
+  }
   if (!user) return <Navigate to="/login" replace />
 
   async function signOut() {
-    await api('/api/auth/logout', { method: 'POST' })
-    setUser(null)
+    setLeaving(true)
+    try {
+      await api('/api/auth/logout', { method: 'POST' })
+      setUser(null)
+    } finally {
+      setLeaving(false)
+    }
   }
 
   return (
@@ -47,7 +69,10 @@ export function AppShell() {
         <div className="mt-6 border-t border-slate-200 pt-4 text-sm">
           <p className="font-medium">{user.name}</p>
           <p className="text-slate-500">{ROLE_LABELS[user.role]}</p>
-          <button type="button" className="mt-3 text-slate-700 underline-offset-2 hover:underline" onClick={() => void signOut()}>Sign out</button>
+          <button type="button" disabled={leaving} className="mt-3 inline-flex items-center gap-2 text-slate-700 underline-offset-2 hover:underline disabled:opacity-60" onClick={() => void signOut()}>
+            {leaving ? <span className="loader" aria-hidden="true" /> : null}
+            Sign out
+          </button>
         </div>
       </aside>
       <main className="px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
@@ -67,7 +92,17 @@ function Item({ to, label, onPick }: { to: string, label: string, onPick: () => 
 
 export function GuestOnly({ children }: { children: ReactNode }) {
   const { user, loaded } = useSession()
-  if (!loaded) return <p className="p-8 text-sm text-slate-500">Loading…</p>
+  if (!loaded) {
+    return (
+      <main className="flex min-h-screen items-center justify-center px-4 py-10" aria-busy="true">
+        <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 sm:p-8">
+          <Shimmer className="h-4 w-24" />
+          <Shimmer className="mt-3 h-8 w-40" />
+          <div className="mt-6"><FormSkeleton fields={2} /></div>
+        </div>
+      </main>
+    )
+  }
   if (user) return <Navigate to="/dashboard" replace />
   return children
 }

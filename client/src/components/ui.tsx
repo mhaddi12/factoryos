@@ -1,5 +1,7 @@
-import type { FormEvent, ReactNode } from 'react'
+import { createContext, useContext, type FormEvent, type ReactNode } from 'react'
 import { ApiError } from '../lib/api'
+
+const BusyContext = createContext(false)
 
 export { Bars } from './charts'
 
@@ -41,37 +43,113 @@ export function Drawer({ title, open, onClose, children }: { title: string, open
   )
 }
 
-export function Field({ label, error, children }: { label: string, error?: string, children: ReactNode }) {
+export function Shimmer({ className = '' }: { className?: string }) {
+  return <span className={`shimmer ${className}`} />
+}
+
+export function LoadingNote() {
+  return <p className="sr-only" role="status">Loading</p>
+}
+
+export function Field({ label, error, loading = false, children }: { label: string, error?: string, loading?: boolean, children: ReactNode }) {
+  const busy = useContext(BusyContext) && !loading
   return (
     <label className="mb-4 block text-sm">
       <span className="mb-1.5 block font-medium text-slate-700">{label}</span>
-      {children}
+      {loading ? <Shimmer className="h-10 w-full" /> : (
+        <span className={`relative block ${busy ? 'field-busy pointer-events-none' : ''}`}>
+          {children}
+          {busy ? <span className="loader absolute top-1/2 right-3 -translate-y-1/2" aria-hidden="true" /> : null}
+        </span>
+      )}
       {error ? <span className="mt-1 block text-red-700">{error}</span> : null}
     </label>
   )
 }
 
+export function BusyForm({ busy, onSubmit, children }: { busy: boolean, onSubmit: () => void | Promise<void>, children: ReactNode }) {
+  return (
+    <BusyContext.Provider value={busy}>
+      <form aria-busy={busy} onSubmit={(event) => { event.preventDefault(); void onSubmit() }}>
+        {children}
+      </form>
+    </BusyContext.Provider>
+  )
+}
+
+export function CardsSkeleton({ count = 8 }: { count?: number }) {
+  return (
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-busy="true">
+      <LoadingNote />
+      {Array.from({ length: count }, (_, index) => (
+        <div key={index} className={panelClass}>
+          <Shimmer className="h-4 w-24" />
+          <Shimmer className="mt-3 h-8 w-20" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+export function ChartSkeleton() {
+  return (
+    <div className="space-y-3" aria-busy="true">
+      <LoadingNote />
+      {Array.from({ length: 5 }, (_, index) => (
+        <div key={index}>
+          <Shimmer className="mb-2 h-3 w-28" />
+          <Shimmer className="h-2 w-full" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+export function FormSkeleton({ fields = 4 }: { fields?: number }) {
+  return (
+    <div aria-busy="true">
+      <LoadingNote />
+      {Array.from({ length: fields }, (_, index) => (
+        <div key={index} className="mb-4">
+          <Shimmer className="mb-2 h-4 w-24" />
+          <Shimmer className="h-10 w-full" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export const inputClass = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 outline-none focus:border-teal-800 focus:ring-2 focus:ring-teal-800/15'
 
-export function Button({ children, type = 'button', onClick, disabled, tone = 'primary' }: { children: ReactNode, type?: 'button' | 'submit', onClick?: () => void, disabled?: boolean, tone?: 'primary' | 'secondary' }) {
+export function Button({ children, type = 'button', onClick, disabled, busy = false, tone = 'primary' }: { children: ReactNode, type?: 'button' | 'submit', onClick?: () => void, disabled?: boolean, busy?: boolean, tone?: 'primary' | 'secondary' }) {
   const look = tone === 'secondary'
     ? 'border border-slate-300 bg-white text-slate-800 hover:bg-slate-50'
     : 'bg-teal-800 text-white hover:bg-teal-900'
   return (
-    <button type={type} disabled={disabled} onClick={onClick} className={`inline-flex min-h-10 items-center justify-center rounded-lg px-3.5 py-2 text-sm font-medium disabled:opacity-60 ${look}`}>
+    <button type={type} disabled={disabled || busy} aria-busy={busy || undefined} onClick={onClick} className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium disabled:opacity-60 ${look}`}>
+      {busy ? <span className={`loader ${tone === 'primary' ? 'loader-on-dark' : ''}`} aria-hidden="true" /> : null}
       {children}
     </button>
   )
 }
 
-export function Table({ headers, children, fit = false }: { headers: string[], children: ReactNode, fit?: boolean }) {
+export function Table({ headers, children, fit = false, loading = false }: { headers: string[], children?: ReactNode, fit?: boolean, loading?: boolean }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white" aria-busy={loading || undefined}>
+      {loading ? <LoadingNote /> : null}
       <table className={`w-full text-left text-sm ${fit ? '' : 'min-w-[36rem]'}`}>
         <thead className="bg-slate-50 text-slate-500">
           <tr>{headers.map(header => <th key={header} className="px-3 py-2.5 font-medium whitespace-nowrap">{header}</th>)}</tr>
         </thead>
-        <tbody className="[&_tr]:border-t [&_tr]:border-slate-200 [&_tr:hover]:bg-slate-50">{children}</tbody>
+        <tbody className="[&_tr]:border-t [&_tr]:border-slate-200 [&_tr:hover]:bg-slate-50">
+          {loading
+            ? Array.from({ length: 6 }, (_, row) => (
+                <tr key={row}>
+                  {headers.map(header => <td key={header} className="px-3 py-3"><Shimmer className="h-4 w-full max-w-36" /></td>)}
+                </tr>
+              ))
+            : children}
+        </tbody>
       </table>
     </div>
   )

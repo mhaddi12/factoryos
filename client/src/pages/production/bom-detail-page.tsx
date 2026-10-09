@@ -3,13 +3,26 @@ import { useParams } from 'react-router-dom'
 import type { BomRecord } from '@shared/types/records'
 import { api } from '../../lib/api'
 import { qty } from '../../lib/format'
-import { Alert, Page, Table, messageOf } from '../../components/ui'
+import { Alert, Page, Shimmer, Table, messageOf } from '../../components/ui'
 
 export function BomDetailPage() {
   const { id = '' } = useParams()
   const [bom, setBom] = useState<BomRecord | null>(null)
   const [error, setError] = useState('')
-  useEffect(() => { api<BomRecord>(`/api/boms/${id}`).then(setBom).catch(reason => setError(messageOf(reason))) }, [id])
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    setLoading(true)
+    api<BomRecord>(`/api/boms/${id}`).then(setBom).catch(reason => setError(messageOf(reason))).finally(() => setLoading(false))
+  }, [id])
+  if (loading) {
+    return (
+      <Page title="BOM">
+        <Shimmer className="mb-4 h-4 w-48" />
+        <div className="mb-6 space-y-2">{Array.from({ length: 3 }, (_, index) => <Shimmer key={index} className="h-10 w-full" />)}</div>
+        <Table headers={['Material', 'Quantity', 'Wastage']} loading />
+      </Page>
+    )
+  }
   if (!bom) return <Page title="BOM"><Alert error={error} /></Page>
   return (
     <Page title={bom.name}>

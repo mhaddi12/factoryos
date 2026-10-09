@@ -40,9 +40,62 @@ input, select, textarea, button {
   to { transform: translateX(0); }
 }
 
+.shimmer {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: 0.5rem;
+  background: #e6edf2;
+}
+
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.75), transparent);
+  animation: shimmer 1.15s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  to { transform: translateX(100%); }
+}
+
+.loader {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  border: 2px solid #cbd5e1;
+  border-top-color: #115e59;
+  border-radius: 999px;
+  animation: spin 0.7s linear infinite;
+}
+
+.loader-on-dark {
+  border-color: rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+}
+
+.field-busy input,
+.field-busy select,
+.field-busy textarea {
+  padding-right: 2.25rem;
+}
+
+.field-busy select {
+  appearance: none;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .chart-bar,
-  .sheet {
+  .sheet,
+  .shimmer::after,
+  .loader {
     animation: none;
     transition: none;
   }

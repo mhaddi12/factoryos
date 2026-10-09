@@ -3,12 +3,24 @@ import type { ReportData } from '@shared/types/records'
 import { api } from '../../lib/api'
 import { money, qty } from '../../lib/format'
 import { CompareBars } from '../../components/charts'
-import { Alert, Bars, Page, messageOf, panelClass } from '../../components/ui'
+import { Alert, Bars, ChartSkeleton, Page, Shimmer, messageOf, panelClass } from '../../components/ui'
 
 export function ReportsPage() {
   const [report, setReport] = useState<ReportData | null>(null)
   const [error, setError] = useState('')
-  useEffect(() => { api<ReportData>('/api/reports').then(setReport).catch(reason => setError(messageOf(reason))) }, [])
+  const [loading, setLoading] = useState(true)
+  useEffect(() => { api<ReportData>('/api/reports').then(setReport).catch(reason => setError(messageOf(reason))).finally(() => setLoading(false)) }, [])
+  if (loading) {
+    return (
+      <Page title="Reports">
+        <div className="grid gap-4 xl:grid-cols-2">
+          {Array.from({ length: 4 }, (_, index) => (
+            <section key={index} className={panelClass}><Shimmer className="mb-4 h-5 w-28" /><ChartSkeleton /></section>
+          ))}
+        </div>
+      </Page>
+    )
+  }
   if (!report) return <Page title="Reports"><Alert error={error} /></Page>
   return (
     <Page title="Reports">
