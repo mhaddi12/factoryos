@@ -34,6 +34,7 @@ jobs:
         run: npm run build
         env:
           VITE_BASE: /factoryos/
+          VITE_API_URL: https://factoryos-xwh1.onrender.com
 
       - name: Keep client routes working
         run: |

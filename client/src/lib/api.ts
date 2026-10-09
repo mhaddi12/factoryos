@@ -11,8 +11,13 @@ export function fieldError(error: unknown, field: string) {
   return error instanceof ApiError ? error.errors[field]?.[0] : undefined
 }
 
+function apiUrl(path: string) {
+  const base = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
+  return `${base}${path}`
+}
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
+  const response = await fetch(apiUrl(path), {
     credentials: 'include',
     ...init,
     headers: {

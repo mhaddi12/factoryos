@@ -68,7 +68,12 @@ export function expressCookieContext(req: Request, res: Response): CookieContext
       })
     },
     delete(name: string, options) {
-      res.clearCookie(name, { path: options?.path ?? '/' })
+      const production = process.env.NODE_ENV === 'production'
+      res.clearCookie(name, {
+        path: options?.path ?? '/',
+        secure: production,
+        sameSite: production ? 'none' : 'lax',
+      })
     },
   }
 }
@@ -102,10 +107,11 @@ function authSecret() {
 }
 
 function cookieOptions(expires: Date) {
+  const production = process.env.NODE_ENV === 'production'
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax' as const,
+    secure: production,
+    sameSite: (production ? 'none' : 'lax') as 'none' | 'lax',
     path: '/',
     expires,
   }
